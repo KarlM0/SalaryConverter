@@ -12,7 +12,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ### Added
 - **Version number** displayed in the page subtitle area, below the usage hint.
 - **"View on GitHub" link** displayed below the version number, pointing to the
-  project repository at `https://github.com/KarlM0/Salary_Converter/`.
+  project repository at `https://github.com/KarlM0/SalaryConverter/`.
 - **Multi-source FX fetching with automatic fallback.** All three rate sources
   (Frankfurter/ECB, open.er-api.com, Currency API via jsDelivr) are queried in
   parallel on every load and refresh. The highest-priority source that succeeds
