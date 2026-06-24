@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Salary Converter</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --bg: #121417;
+    --panel: #1b1f24;
+    --panel-2: #181c21;
+    --border: #2a3038;
+    --text: #e6e8eb;
+    --muted: #8a929b;
+    --accent: #4cc9c0;
+    --warn: #e8a857;
+    --ok: #6aaa64;
+    --err: #d96565;
+  }
+  * { box-sizing: border-box; }
+  html, body { background: var(--bg); }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: var(--text);
+    padding: 32px 20px;
+    min-height: 100vh;
+  }
+  .container { max-width: 920px; margin: 0 auto; }
+  h1 { font-weight: 500; font-size: 22px; margin: 0 0 6px; letter-spacing: 0.2px; }
+  .subtitle { color: var(--muted); font-size: 13px; margin-bottom: 22px; }
+
+  .status {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    margin-bottom: 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .status.warn { border-color: var(--warn); }
+  .status-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .active-source { font-size: 13px; color: var(--text); }
+  .active-source .label { color: var(--muted); }
+  .rates-values { font-size: 13px; color: var(--muted); }
+  .rates-values strong { color: var(--text); font-weight: 500; }
+  .sources-line { font-size: 12px; color: var(--muted); }
+  .sources-line .src-active { color: var(--accent); font-weight: 600; }
+  .sources-line .src-ok { color: var(--ok); }
+  .sources-line .src-err { color: var(--err); }
+  .sources-line .src-name { color: var(--muted); }
+  .sources-line .src-name.active { color: var(--text); }
+  .badge-live { color: var(--accent); }
+  .badge-stale { color: var(--warn); }
+
+  button {
+    background: transparent;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    padding: 6px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    font-family: inherit;
+    transition: background 0.15s;
+    white-space: nowrap;
+  }
+  button:hover { background: rgba(76,201,192,0.10); }
+  button:disabled { opacity: 0.5; cursor: wait; }
+
+  table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  th, td { padding: 10px 12px; text-align: left; vertical-align: middle; }
+  th {
+    background: var(--panel-2);
+    color: var(--muted);
+    font-weight: 500;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    border-bottom: 1px solid var(--border);
+  }
+  tr + tr td { border-top: 1px solid var(--border); }
+  th:first-child, td:first-child {
+    color: var(--muted);
+    font-weight: 500;
+    width: 110px;
+  }
+
+  input.cell {
+    width: 100%;
+    background: #14181d;
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 10px;
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: 14px;
+  }
+  input.cell:focus {
+    outline: none;
+    border-color: var(--accent);
+    background: #161b21;
+  }
+
+  .footer {
+    margin-top: 18px;
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.7;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Salary Converter</h1>
+  <div class="subtitle">Type into any cell — the rest fill in automatically.</div>
+  <div class="subtitle">v1.1.0 &nbsp;·&nbsp; <a href="https://github.com/KarlM0/Salary_Converter/" target="_blank" rel="noopener noreferrer" style="color:var(--muted);text-decoration:none;" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--muted)'">View on GitHub</a></div>
+
+  <div class="status" id="status">
+    <div class="status-row">
+      <div class="active-source" id="active-source">Loading exchange rates…</div>
+      <button id="refresh">Refresh rates</button>
+    </div>
+    <div class="rates-values" id="rates-values"></div>
+    <div class="sources-line" id="sources-line"></div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Period</th>
+        <th>CZK</th>
+        <th>EUR</th>
+        <th>USD</th>
+        <th>GBP</th>
+      </tr>
+    </thead>
+    <tbody id="grid"></tbody>
+  </table>
+
+  <div class="footer">
+    Assumptions: 1 day = 8 hours · 1 week = 5 working days · 1 month = 21.5 working days · 1 year = 260 working days.<br>
+    Values are truncated (cut, not rounded) to 2 decimals.
+  </div>
+</div>
+
+<script>
+  // ---------- Constants ----------
+  const PERIODS = [
+    { key: "hourly",  label: "Hourly",  hours: 1 },
+    { key: "daily",   label: "Daily",   hours: 8 },
+    { key: "weekly",  label: "Weekly",  hours: 40 },
+    { key: "monthly", label: "Monthly", hours: 172 },   // 21.5 days × 8 h
+    { key: "yearly",  label: "Yearly",  hours: 2080 },  // 260 days × 8 h
+  ];
+  const CURRENCIES = ["CZK", "EUR", "USD", "GBP"];
+
+  // Rate sources, listed in priority order. The first one that succeeds is used.
+  // Each source must produce { rates: { EUR, CZK, USD, GBP }, date } where rates
+  // are expressed as "1 EUR = X currency" (so EUR is always 1).
+  const RATE_SOURCES = [
+    {
+      name: "Frankfurter (ECB)",
+      url: "https://api.frankfurter.app/latest?from=EUR&to=CZK,USD,GBP",
+      parse: (d) => ({
+        rates: { EUR: 1, CZK: d.rates.CZK, USD: d.rates.USD, GBP: d.rates.GBP },
+        date: d.date || null,
+      }),
+    },
+    {
+      name: "open.er-api.com",
+      url: "https://open.er-api.com/v6/latest/EUR",
+      parse: (d) => {
+        if (d.result && d.result !== "success") throw new Error("API result: " + d.result);
+        return {
+          rates: { EUR: 1, CZK: d.rates.CZK, USD: d.rates.USD, GBP: d.rates.GBP },
+          date: d.time_last_update_utc
+            ? new Date(d.time_last_update_utc).toISOString().slice(0, 10)
+            : null,
+        };
+      },
+    },
+    {
+      name: "Currency API (jsDelivr)",
+      url: "https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/eur.json",
+      parse: (d) => {
+        const e = d.eur || {};
+        return {
+          rates: { EUR: 1, CZK: e.czk, USD: e.usd, GBP: e.gbp },
+          date: d.date || null,
+        };
+      },
+    },
+  ];
+
+  // ---------- State ----------
+  // Fallback values used only if every source fails.
+  let rates = { EUR: 1, CZK: 25.20, USD: 1.08, GBP: 0.85 };
+  let ratesAreStale = true;
+  let ratesDate = null;
+  let activeSourceName = null;
+  let sourceStatuses = []; // [{ name, ok, error, date }]
+
+  // ---------- Truncate-to-2-decimals (cut, not round) ----------
+  function truncTo2(n) {
+    if (!Number.isFinite(n)) return "";
+    const sign = n < 0 ? -1 : 1;
+    const truncated = Math.trunc(Math.abs(n) * 100) / 100;
+    const fixed = (sign * truncated).toFixed(2);
+    const [intPart, decPart] = fixed.split(".");
+    const withSep = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+    return decPart ? withSep + "." + decPart : withSep;
+  }
+
+  // ---------- Build the grid ----------
+  const grid = document.getElementById("grid");
+  PERIODS.forEach(p => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${p.label}</td>` + CURRENCIES.map(c =>
+      `<td><input class="cell" type="text" inputmode="decimal" autocomplete="off" data-period="${p.key}" data-currency="${c}" placeholder="0.00"></td>`
+    ).join("");
+    grid.appendChild(tr);
+  });
+
+  // ---------- Calculation ----------
+  // Base unit: EUR per hour. Convert origin → base, then base → every other cell.
+  function recalcFrom(eurPerHour, originPeriod, originCurrency) {
+    document.querySelectorAll("input.cell").forEach(inp => {
+      if (inp.dataset.period === originPeriod && inp.dataset.currency === originCurrency) return;
+      const p = PERIODS.find(x => x.key === inp.dataset.period);
+      const value = eurPerHour * p.hours * rates[inp.dataset.currency];
+      inp.value = truncTo2(value);
+    });
+  }
+
+  function clearAllExcept(originPeriod, originCurrency) {
+    document.querySelectorAll("input.cell").forEach(inp => {
+      if (inp.dataset.period === originPeriod && inp.dataset.currency === originCurrency) return;
+      inp.value = "";
+    });
+  }
+
+  function parseAmount(raw) {
+    if (raw == null) return NaN;
+    // Accept comma as decimal separator and ignore spaces / thousands separators.
+    const cleaned = String(raw).replace(/\s/g, "").replace(",", ".");
+    const n = parseFloat(cleaned);
+    return Number.isFinite(n) ? n : NaN;
+  }
+
+  document.addEventListener("input", e => {
+    const inp = e.target;
+    if (!inp.matches("input.cell")) return;
+    const period = inp.dataset.period;
+    const currency = inp.dataset.currency;
+    const amount = parseAmount(inp.value);
+    if (!Number.isFinite(amount)) {
+      clearAllExcept(period, currency);
+      return;
+    }
+    const p = PERIODS.find(x => x.key === period);
+    const eurPerHour = amount / p.hours / rates[currency];
+    recalcFrom(eurPerHour, period, currency);
+  });
+
+  // On blur, normalise the user's own cell to the same 2-decimal truncated format.
+  document.addEventListener("blur", e => {
+    const inp = e.target;
+    if (!inp.matches || !inp.matches("input.cell")) return;
+    const amount = parseAmount(inp.value);
+    if (Number.isFinite(amount)) inp.value = truncTo2(amount);
+  }, true);
+
+  // ---------- FX rates ----------
+  const activeSourceEl = document.getElementById("active-source");
+  const ratesValuesEl = document.getElementById("rates-values");
+  const sourcesLineEl = document.getElementById("sources-line");
+  const statusEl = document.getElementById("status");
+  const refreshBtn = document.getElementById("refresh");
+
+  function fmtRate(n) {
+    return Number.isFinite(n) ? n.toFixed(4).replace(/0+$/, "").replace(/\.$/, "") : "—";
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, ch => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+    }[ch]));
+  }
+
+  function renderRates() {
+    if (ratesAreStale) {
+      activeSourceEl.innerHTML =
+        `<span class="badge-stale">⚠ Using fallback rates</span> <span class="label">— all sources failed</span>`;
+    } else {
+      activeSourceEl.innerHTML =
+        `<span class="badge-live">●</span> <span class="label">Source:</span> ` +
+        `<strong>${escapeHtml(activeSourceName)}</strong>` +
+        (ratesDate ? ` <span class="label">· ${escapeHtml(ratesDate)}</span>` : "");
+    }
+
+    ratesValuesEl.innerHTML =
+      `<strong>1 EUR</strong> = ${fmtRate(rates.CZK)} CZK · ${fmtRate(rates.USD)} USD · ${fmtRate(rates.GBP)} GBP`;
+
+    if (sourceStatuses.length) {
+      sourcesLineEl.innerHTML = "Sources tried: " + sourceStatuses.map(s => {
+        const isActive = !ratesAreStale && s.name === activeSourceName;
+        let icon, cls;
+        if (s.ok && isActive) { icon = "✓"; cls = "src-active"; }
+        else if (s.ok)        { icon = "✓"; cls = "src-ok"; }
+        else                  { icon = "✗"; cls = "src-err"; }
+        const tooltip = s.ok ? "" : ` title="${escapeHtml(s.error || "failed")}"`;
+        const nameCls = isActive ? "src-name active" : "src-name";
+        return `<span class="${cls}"${tooltip}>${icon}</span> <span class="${nameCls}">${escapeHtml(s.name)}</span>`;
+      }).join(" &nbsp;·&nbsp; ");
+    } else {
+      sourcesLineEl.textContent = "";
+    }
+
+    statusEl.classList.toggle("warn", ratesAreStale);
+  }
+
+  function recomputeFromFirstFilled() {
+    const any = Array.from(document.querySelectorAll("input.cell"))
+      .find(i => i.value.trim() !== "");
+    if (any) any.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+
+  async function tryOneSource(src) {
+    try {
+      // Bust caches so "Refresh rates" actually fetches fresh data.
+      const sep = src.url.includes("?") ? "&" : "?";
+      const url = src.url + sep + "_=" + Date.now();
+      const res = await fetch(url, { cache: "no-store" });
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const data = await res.json();
+      const parsed = src.parse(data);
+      const r = parsed.rates;
+      if (![r.CZK, r.USD, r.GBP].every(x => typeof x === "number" && isFinite(x) && x > 0)) {
+        throw new Error("missing or invalid rate values");
+      }
+      return { name: src.name, ok: true, parsed };
+    } catch (err) {
+      return { name: src.name, ok: false, error: err.message || String(err) };
+    }
+  }
+
+  async function fetchRates() {
+    refreshBtn.disabled = true;
+    refreshBtn.textContent = "Refreshing…";
+
+    // Check every source in parallel — but pick the highest-priority winner
+    // (i.e. the first one in RATE_SOURCES order that succeeded).
+    const results = await Promise.all(RATE_SOURCES.map(tryOneSource));
+    sourceStatuses = results;
+
+    const winner = results.find(r => r.ok);
+    if (winner) {
+      rates = winner.parsed.rates;
+      ratesDate = winner.parsed.date;
+      activeSourceName = winner.name;
+      ratesAreStale = false;
+    } else {
+      ratesAreStale = true;
+      activeSourceName = null;
+      ratesDate = null;
+    }
+
+    renderRates();
+    recomputeFromFirstFilled();
+
+    refreshBtn.disabled = false;
+    refreshBtn.textContent = "Refresh rates";
+  }
+
+  refreshBtn.addEventListener("click", fetchRates);
+  renderRates();
+  fetchRates();
+</script>
+</body>
+</html>
